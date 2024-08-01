@@ -1,0 +1,38 @@
+# Mount Google Drive
+from google.colab import drive
+drive.mount('/content/drive')
+
+# Import necessary libraries
+import pandas as pd
+import numpy as np
+
+# Load the data
+file_path = '/content/drive/My Drive/householddata.csv'
+data = pd.read_csv(file_path)
+
+# Convert the 'Time' column to datetime
+data['Time'] = pd.to_datetime(data['Time'])
+
+# Define non-peak hours
+non_peak_hours = list(range(23, 24)) + list(range(0, 6))  # 11pm to 6am
+
+# Define specific peak hours to be swapped (10am, 1pm, 4pm)
+specific_peak_hours = [10, 13, 16]
+
+# Identify indices for specific peak hours
+specific_peak_indices = data[data['Time'].dt.hour.isin(specific_peak_hours)].index
+
+# Identify indices for non-peak hours
+non_peak_indices = data[data['Time'].dt.hour.isin(non_peak_hours)].index
+
+# Randomly select non-peak values
+non_peak_values = data.loc[non_peak_indices, 'Power'].sample(len(specific_peak_indices)).values
+
+# Swap the specific peak values with selected non-peak values
+data.loc[specific_peak_indices, 'Power'] = non_peak_values
+
+# Save the modified data to a new CSV file
+modified_file_path = '/content/drive/My Drive/householddata_swapped.csv'
+data.to_csv(modified_file_path, index=False)
+
+print("Data swapping completed and saved to 'householddata_swapped.csv'.")
