@@ -1,0 +1,99 @@
+# Mount Google Drive
+from google.colab import drive
+drive.mount('/content/drive')
+
+# Import necessary libraries
+import pandas as pd
+import numpy as np
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import OPTICS
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+
+# Load the original data
+original_file_path = '/content/drive/My Drive/householddata.csv'
+data_original = pd.read_csv(original_file_path)
+
+# Convert the 'Time' column to datetime
+data_original['Time'] = pd.to_datetime(data_original['Time'])
+
+# Normalize the 'Power' column
+scaler = StandardScaler()
+data_original['Power'] = scaler.fit_transform(data_original[['Power']])
+
+# Extract peak usage data (6am to 11pm)
+data_original['Hour'] = data_original['Time'].dt.hour
+data_original_peak = data_original[(data_original['Hour'] >= 6) & (data_original['Hour'] <= 23)]
+
+# Prepare the data for OPTICS
+X_peak = data_original_peak[['Power']].values
+
+# Apply OPTICS with adjusted parameters
+optics_model = OPTICS(min_samples=50, xi=0.01, min_cluster_size=0.01)
+clusters = optics_model.fit_predict(X_peak)
+
+# Add the cluster labels to the original peak data
+data_original_peak['Cluster'] = clusters
+
+# Load the tampered data
+tampered_file_path = '/content/drive/My Drive/householddata_swapped.csv'
+data_tampered = pd.read_csv(tampered_file_path)
+
+# Convert the 'Time' column to datetime
+data_tampered['Time'] = pd.to_datetime(data_tampered['Time'])
+
+# Normalize the 'Power' column using the same scaler
+data_tampered['Power'] = scaler.transform(data_tampered[['Power']])
+
+# Extract peak usage data (6am to 11pm)
+data_tampered['Hour'] = data_tampered['Time'].dt.hour
+data_tampered_peak = data_tampered[(data_tampered['Hour'] >= 6) & (data_tampered['Hour'] <= 23)]
+
+# Prepare the tampered data for prediction
+X_tampered_peak = data_tampered_peak[['Power']].values
+
+# Apply the trained OPTICS model to tampered data
+tampered_clusters = optics_model.fit_predict(X_tampered_peak)
+
+# Add the cluster labels to the tampered peak data
+data_tampered_peak['Cluster'] = tampered_clusters
+
+# Detect anomalies at specified times (10am, 1pm, and 4pm)
+anomalies = data_tampered_peak[(data_tampered_peak['Cluster'] == -1) &
+                               (data_tampered_peak['Hour'].isin([10, 13, 16]))]
+
+# Plot anomalies
+plt.figure(figsize=(10, 6))
+plt.scatter(data_tampered_peak['Time'], data_tampered_peak['Power'], label='Data')
+plt.scatter(anomalies['Time'], anomalies['Power'], color='red', label='Anomalies')
+plt.title('Detected Anomalies in Tampered Data')
+plt.xlabel('Time')
+plt.ylabel('Normalized Power')
+plt.legend()
+plt.show()
+
+# Plot reachability plot
+plt.figure(figsize=(10, 6))
+space = np.arange(len(optics_model.ordering_))
+reachability = optics_model.reachability_[optics_model.ordering_]
+plt.plot(space, reachability, 'k.', alpha=0.3)
+plt.title('Reachability Plot')
+plt.xlabel('Sample index')
+plt.ylabel('Reachability distance')
+plt.show()
+
+# Normalize 'Timestamp' for 3D plotting
+data_tampered_peak['Timestamp'] = (data_tampered_peak['Time'].astype(np.int64) // 10**9) % (24 * 60 * 60)
+anomalies['Timestamp'] = (anomalies['Time'].astype(np.int64) // 10**9) % (24 * 60 * 60)
+
+# Plot anomalies in 3D
+fig = plt.figure(figsize=(12, 8))
+ax = fig.add_subplot(111, projection='3d')
+ax.scatter(data_tampered_peak['Timestamp'].values, data_tampered_peak['Hour'].values, data_tampered_peak['Power'].values, label='Data')
+ax.scatter(anomalies['Timestamp'].values, anomalies['Hour'].values, anomalies['Power'].values, color='red', label='Anomalies')
+ax.set_title('Detected Anomalies in Tampered Data (3D)')
+ax.set_xlabel('Timestamp')
+ax.set_ylabel('Hour')
+ax.set_zlabel('Normalized Power')
+plt.legend()
+plt.show()
